@@ -20,18 +20,5 @@
     "src/app/api/admin/stats/route.ts": {
       "maxDuration": 15
     }
-  },
-  "env": [
-    "NEXT_PUBLIC_SUPABASE_URL",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-    "SUPABASE_SERVICE_ROLE_KEY",
-    "REPLICATE_API_TOKEN",
-    "REPLICATE_WEBHOOK_SECRET",
-    "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY",
-    "STRIPE_SECRET_KEY",
-    "STRIPE_PRICE_ID",
-    "STRIPE_WEBHOOK_SECRET",
-    "NEXT_PUBLIC_APP_URL",
-    "DATABASE_URL"
-  ]
+  }
 }

@@ -251,6 +251,13 @@ function DashboardContent() {
               <h1 className="text-3xl font-display font-bold mb-2">Choose Your Style</h1>
               <p className="text-dark-400 mb-8">Select the look that fits your professional image.</p>
 
+              {error && (
+                <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 mb-6 flex items-center gap-3">
+                  <AlertCircle className="w-5 h-5 shrink-0" />
+                  {error}
+                </div>
+              )}
+
               {/* Style Selection */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
                 {styles.map(s => (
