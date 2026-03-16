@@ -54,30 +54,16 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Try getUser() first (validates JWT with Supabase), fall back to getSession() 
-  // if Supabase API is unreachable (avoids redirect loop when Supabase is down)
-  let user = null;
-  try {
-    const { data, error } = await supabase.auth.getUser();
-    if (!error) {
-      user = data.user;
-    } else {
-      // getUser() failed — try getSession() as fallback (reads from cookie only, no network)
-      console.warn(`[middleware] getUser() failed: ${error.message} — falling back to getSession()`);
-      const { data: sessionData } = await supabase.auth.getSession();
-      user = sessionData.session?.user ?? null;
-    }
-  } catch (err: any) {
-    console.error(`[middleware] Auth check threw: ${err.message} — falling back to getSession()`);
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      user = sessionData.session?.user ?? null;
-    } catch {
-      // Complete auth failure — let the user through to avoid infinite redirect
-      console.error('[middleware] Complete auth failure, allowing request through');
-      return response;
-    }
-  }
+  // Validate the JWT with Supabase. getUser() also handles token refresh
+  // internally — if the access token is expired but the refresh token is valid,
+  // it refreshes and calls setAll() to persist the new cookies.
+  //
+  // IMPORTANT: Do NOT fall back to getSession() here. getSession() reads from
+  // the cookie without server validation, so it would let users with expired
+  // tokens through to protected pages. Then API calls (which use getUser())
+  // would reject them with 401, creating a confusing redirect-to-login loop.
+  const { data, error } = await supabase.auth.getUser();
+  const user = error ? null : data.user;
 
   if (!user) {
     console.warn(`[middleware] No user session on protected route ${pathname} — redirecting to login`);

@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { config } from '@/lib/config';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, applyAuthCookies } from '@/lib/auth';
 import { validateOrigin } from '@/lib/csrf';
 import { validateUUID } from '@/lib/validation';
 import { prisma } from '@/lib/prisma';
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     // Authentication required
     const authResult = await requireAuth(req);
     if ('error' in authResult) return authResult.error;
-    const { user } = authResult;
+    const { user, cookieUpdates } = authResult;
 
     // Rate limiting: 20 requests per minute per user
     const rlKey = `checkout:${user.id}`;
@@ -71,16 +71,15 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ url: session.url, sessionId: session.id });
+    const response = NextResponse.json({ url: session.url, sessionId: session.id });
+    applyAuthCookies(response, cookieUpdates);
+    return response;
   } catch (error: unknown) {
     console.error('Checkout error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
-    const isAuthError = message.includes('did not match') ||
-                        message.includes('is not a function') ||
-                        message.includes('Cannot read prop');
     return NextResponse.json(
-      { error: isAuthError ? 'Session expired. Please sign in again.' : (message || 'Checkout failed') },
-      { status: isAuthError ? 401 : 500 }
+      { error: message || 'Checkout failed' },
+      { status: 500 }
     );
   }
 }

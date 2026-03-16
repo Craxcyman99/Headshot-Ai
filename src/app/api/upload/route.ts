@@ -9,7 +9,7 @@ import { randomUUID } from 'crypto';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import { validateImageBuffer } from '@/lib/file-security';
 import { validateStyle, validateBackground } from '@/lib/validation';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, applyAuthCookies } from '@/lib/auth';
 import { validateOrigin } from '@/lib/csrf';
 import { uploadImage, createSupabaseAdminClient } from '@/lib/supabase';
 import { prisma } from '@/lib/prisma';
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     // Authentication required
     const authResult = await requireAuth(req);
     if ('error' in authResult) return authResult.error;
-    const { user } = authResult;
+    const { user, cookieUpdates } = authResult;
 
     // Rate limiting (20 uploads per minute)
     const clientIp = getClientIp(req);
@@ -114,17 +114,15 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ jobId, status: 'uploaded', photoCount: photos.length });
+    const response = NextResponse.json({ jobId, status: 'uploaded', photoCount: photos.length });
+    applyAuthCookies(response, cookieUpdates);
+    return response;
   } catch (error: unknown) {
     console.error('Upload error:', error);
     const message = error instanceof Error ? error.message : String(error);
-    // Map internal/cryptic errors to user-friendly messages
-    const isAuthError = message.includes('did not match') ||
-                        message.includes('is not a function') ||
-                        message.includes('Cannot read prop');
     return NextResponse.json(
-      { error: isAuthError ? 'Session expired. Please sign in again.' : (message || 'Upload failed') },
-      { status: isAuthError ? 401 : 500 }
+      { error: message || 'Upload failed' },
+      { status: 500 }
     );
   }
 }

@@ -95,12 +95,8 @@ function DashboardContent() {
 
     try {
       // Validate that file objects are still readable before building FormData.
-      // File objects from drag-drop can become detached under browser memory
-      // pressure, causing fetch() to throw "The string did not match the
-      // expected pattern" when serializing the multipart body.
       for (const f of files) {
         try {
-          // Reading a 1-byte slice verifies the blob data is still accessible
           await f.file.slice(0, 1).arrayBuffer();
         } catch {
           setError('Some photos are no longer accessible. Please remove them and re-upload.');
@@ -118,37 +114,25 @@ function DashboardContent() {
 
       const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData, credentials: 'same-origin' });
 
-      // Guard against non-JSON responses (e.g. HTML error page from expired session)
-      const contentType = uploadRes.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        window.location.href = '/?redirect=/dashboard';
-        return;
-      }
-
-      const uploadData = await uploadRes.json();
-
+      // Only redirect to login on a genuine 401 JSON response
       if (uploadRes.status === 401) {
         window.location.href = '/?redirect=/dashboard';
         return;
       }
 
+      const contentType = uploadRes.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error('Server returned an unexpected response. Please try again.');
+      }
+
+      const uploadData = await uploadRes.json();
       if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed');
 
       setJobId(uploadData.jobId);
       setStep(3);
     } catch (err: any) {
       console.error('Upload error:', err);
-      // If the error looks like a cookie/auth/DOMException issue, redirect to re-auth
-      const msg = err.message || '';
-      if (msg.includes('pattern') || msg.includes('cookie') || err.name === 'DOMException') {
-        window.location.href = '/?redirect=/dashboard';
-        return;
-      }
-      setError(
-        msg.includes('pattern') || msg.includes('Authentication')
-          ? 'Your session has expired. Redirecting to sign in...'
-          : msg || 'Upload failed. Please try again.'
-      );
+      setError(err.message || 'Upload failed. Please try again.');
     } finally {
       setCheckoutLoading(false);
     }
@@ -167,20 +151,19 @@ function DashboardContent() {
         body: JSON.stringify({ jobId }),
         credentials: 'same-origin',
       });
-      
-      const checkoutContentType = res.headers.get('content-type') || '';
-      if (!checkoutContentType.includes('application/json')) {
-        window.location.href = '/?redirect=/dashboard';
-        return;
-      }
 
-      const data = await res.json();
-
+      // Only redirect to login on a genuine 401 response
       if (res.status === 401) {
         window.location.href = '/?redirect=/dashboard';
         return;
       }
 
+      const checkoutContentType = res.headers.get('content-type') || '';
+      if (!checkoutContentType.includes('application/json')) {
+        throw new Error('Server returned an unexpected response. Please try again.');
+      }
+
+      const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Checkout failed');
 
       // Validate Stripe URL before navigating
@@ -190,12 +173,7 @@ function DashboardContent() {
       window.location.href = data.url;
     } catch (err: any) {
       console.error('Checkout error:', err);
-      const msg = err.message || '';
-      if (msg.includes('pattern') || msg.includes('cookie') || err.name === 'DOMException') {
-        window.location.href = '/?redirect=/dashboard';
-        return;
-      }
-      setError(msg || 'Checkout failed. Please try again.');
+      setError(err.message || 'Checkout failed. Please try again.');
       setCheckoutLoading(false);
     }
   };

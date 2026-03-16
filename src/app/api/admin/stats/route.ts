@@ -6,7 +6,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, applyAuthCookies } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   // Require admin auth
   const authResult = await requireAdmin(req);
   if ('error' in authResult) return authResult.error;
-  const { user } = authResult;
+  const { user, cookieUpdates } = authResult;
 
   // Rate limiting
   const rl = checkRateLimit(`admin:${user.id}`, { maxRequests: 30 });
@@ -50,11 +50,13 @@ export async function GET(req: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(20);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       totalJobs: totalJobs || 0,
       totalRevenue,
       recentJobs: recentJobs || [],
     });
+    applyAuthCookies(response, cookieUpdates);
+    return response;
   } catch (error) {
     console.error("Admin stats error:", error);
     return NextResponse.json(

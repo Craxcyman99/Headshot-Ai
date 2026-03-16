@@ -12,7 +12,7 @@ import Replicate from 'replicate';
 import { STYLE_PROMPTS, BACKGROUND_DESCRIPTIONS } from '@/lib/replicate';
 import { createSupabaseAdminClient } from '@/lib/supabase';
 import { checkRateLimit } from '@/lib/rate-limit';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, applyAuthCookies } from '@/lib/auth';
 import { validateOrigin } from '@/lib/csrf';
 import { validateUUID } from '@/lib/validation';
 import { prisma } from '@/lib/prisma';
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     // Authentication required
     const authResult = await requireAuth(req);
     if ('error' in authResult) return authResult.error;
-    const { user } = authResult;
+    const { user, cookieUpdates } = authResult;
 
     // Rate limiting: 10 requests per minute per user
     const rlKey = `generate:${user.id}`;
@@ -144,7 +144,9 @@ export async function POST(req: NextRequest) {
 
       console.log(`Prediction started: ${prediction.id} for job ${jobId}`);
 
-      return NextResponse.json({ jobId, status: 'processing', predictionId: prediction.id });
+      const resp = NextResponse.json({ jobId, status: 'processing', predictionId: prediction.id });
+      applyAuthCookies(resp, cookieUpdates);
+      return resp;
     } else {
       // Mock for dev / no API key — complete immediately
       console.log('⚠️  No Replicate token — returning mock images');
@@ -161,12 +163,14 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      return NextResponse.json({
+      const resp = NextResponse.json({
         jobId,
         status: 'completed',
         count: mockUrls.length,
         images: mockUrls,
       });
+      applyAuthCookies(resp, cookieUpdates);
+      return resp;
     }
   } catch (error: any) {
     console.error('Generation error:', error);

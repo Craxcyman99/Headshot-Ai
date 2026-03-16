@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { config } from './config';
 
 export interface AuthenticatedUser {
@@ -18,14 +18,48 @@ export interface AuthenticatedUser {
   isAdmin: boolean;
 }
 
+export interface CookieUpdate {
+  name: string;
+  value: string;
+  options: CookieOptions;
+}
+
+type AuthSuccess = {
+  user: AuthenticatedUser;
+  cookieUpdates: CookieUpdate[];
+  error?: never;
+};
+
+type AuthFailure = {
+  user?: never;
+  cookieUpdates?: never;
+  error: NextResponse;
+};
+
+/**
+ * Apply cookie updates from requireAuth() to a response.
+ * This propagates session refresh cookies so the browser persists new tokens.
+ */
+export function applyAuthCookies(response: NextResponse, cookieUpdates: CookieUpdate[]): NextResponse {
+  for (const { name, value, options } of cookieUpdates) {
+    response.cookies.set(name, value, { ...options, path: '/', sameSite: 'lax' as const });
+  }
+  return response;
+}
+
 /**
  * Require authentication for an API route.
- * Returns the authenticated user or an error response.
+ * Returns the authenticated user and any cookie updates (from token refresh).
+ * Route handlers MUST call applyAuthCookies() on their response to persist
+ * refreshed tokens — otherwise the browser keeps the old (invalidated) refresh
+ * token and every subsequent request fails.
  */
 export async function requireAuth(
   req: NextRequest
-): Promise<{ user: AuthenticatedUser; error?: never } | { user?: never; error: NextResponse }> {
+): Promise<AuthSuccess | AuthFailure> {
   try {
+    const cookieUpdates: CookieUpdate[] = [];
+
     const supabase = createServerClient(
       config.supabase.url,
       config.supabase.anonKey,
@@ -34,11 +68,10 @@ export async function requireAuth(
           getAll() {
             return req.cookies.getAll().map(c => ({ name: c.name, value: c.value }));
           },
-          setAll() {
-            // Read-only context: API route handlers don't propagate cookie
-            // updates via requireAuth. The middleware handles token refresh
-            // for page requests. This no-op prevents the Supabase SSR
-            // library from throwing when it tries to update cookies.
+          setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
+            for (const c of cookiesToSet) {
+              cookieUpdates.push(c);
+            }
           },
         },
       }
@@ -71,6 +104,7 @@ export async function requireAuth(
         email: user.email ?? '',
         isAdmin,
       },
+      cookieUpdates,
     };
   } catch (err) {
     console.error('Auth error:', err);
@@ -88,7 +122,7 @@ export async function requireAuth(
  */
 export async function requireAdmin(
   req: NextRequest
-): Promise<{ user: AuthenticatedUser; error?: never } | { user?: never; error: NextResponse }> {
+): Promise<AuthSuccess | AuthFailure> {
   const authResult = await requireAuth(req);
 
   if ('error' in authResult) {
