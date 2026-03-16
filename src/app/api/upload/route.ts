@@ -1,17 +1,19 @@
 /**
  * Upload API Route
- * Handles photo uploads with full security: auth, rate limiting,
- * magic byte validation, input validation, and CSRF protection.
- * Files are stored in Supabase Storage for persistence.
+ * Accepts photo URLs (already uploaded to Supabase Storage from the client)
+ * and creates a job record.
+ *
+ * Photos are uploaded directly from the browser to Supabase Storage to avoid
+ * Vercel's 4.5MB serverless function body size limit.
+ *
+ * Security: auth required, rate limited, CSRF protected, input validated.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
-import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
-import { validateImageBuffer } from '@/lib/file-security';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { validateStyle, validateBackground } from '@/lib/validation';
 import { requireAuth, applyAuthCookies } from '@/lib/auth';
 import { validateOrigin } from '@/lib/csrf';
-import { uploadImage, createSupabaseAdminClient } from '@/lib/supabase';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -28,8 +30,7 @@ export async function POST(req: NextRequest) {
     if ('error' in authResult) return authResult.error;
     const { user, cookieUpdates } = authResult;
 
-    // Rate limiting (20 uploads per minute)
-    const clientIp = getClientIp(req);
+    // Rate limiting (20 requests per minute)
     const rlKey = `upload:${user.id}`;
     const rl = checkRateLimit(rlKey, { maxRequests: 20 });
     if (!rl.allowed) {
@@ -42,67 +43,43 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const formData = await req.formData();
-    const photos = formData.getAll('photos') as File[];
-    const styleRaw = (formData.get('style') as string) || 'professional';
-    const backgroundRaw = (formData.get('background') as string) || 'white';
+    const body = await req.json();
+    const { photoUrls, style: styleRaw, background: backgroundRaw } = body;
+
+    // Validate photo URLs
+    if (!Array.isArray(photoUrls) || photoUrls.length < 5) {
+      return NextResponse.json({ error: 'Please upload at least 5 photos' }, { status: 400 });
+    }
+
+    if (photoUrls.length > 15) {
+      return NextResponse.json({ error: 'Maximum 15 photos allowed' }, { status: 400 });
+    }
+
+    // Validate all URLs are from our Supabase storage and belong to this user
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    for (const url of photoUrls) {
+      if (typeof url !== 'string' || !url.startsWith(`${supabaseUrl}/storage/`)) {
+        return NextResponse.json({ error: 'Invalid photo URL' }, { status: 400 });
+      }
+      if (!url.includes(`/${user.id}/`)) {
+        return NextResponse.json({ error: 'Unauthorized photo URL' }, { status: 403 });
+      }
+    }
 
     // Validate style and background
-    const styleResult = validateStyle(styleRaw);
+    const styleResult = validateStyle(styleRaw || 'professional');
     if (!styleResult.valid) {
       return NextResponse.json({ error: styleResult.error }, { status: 400 });
     }
 
-    const bgResult = validateBackground(backgroundRaw);
+    const bgResult = validateBackground(backgroundRaw || 'white');
     if (!bgResult.valid) {
       return NextResponse.json({ error: bgResult.error }, { status: 400 });
-    }
-
-    if (photos.length < 5) {
-      return NextResponse.json({ error: 'Please upload at least 5 photos' }, { status: 400 });
-    }
-
-    if (photos.length > 15) {
-      return NextResponse.json({ error: 'Maximum 15 photos allowed' }, { status: 400 });
-    }
-
-    // Read and validate each file once
-    const validatedPhotos: { buffer: Buffer; name: string; mime: string }[] = [];
-
-    for (const photo of photos) {
-      if (!(photo instanceof File)) {
-        return NextResponse.json({ error: 'Invalid file upload' }, { status: 400 });
-      }
-      const buffer = Buffer.from(await photo.arrayBuffer());
-      const validation = validateImageBuffer(buffer);
-      if (!validation.valid) {
-        return NextResponse.json(
-          { error: `Invalid file "${photo.name}": ${validation.error}` },
-          { status: 400 }
-        );
-      }
-      validatedPhotos.push({ buffer, name: photo.name, mime: validation.detectedMime! });
     }
 
     // Create job
     const jobId = randomUUID();
 
-    // Upload all files to Supabase Storage
-    const supabaseUrls: string[] = [];
-
-    for (let i = 0; i < validatedPhotos.length; i++) {
-      const { buffer, mime } = validatedPhotos[i];
-      const ext = mime === 'image/jpeg' ? 'jpg'
-        : mime === 'image/png' ? 'png'
-        : mime === 'image/webp' ? 'webp' : 'jpg';
-
-      const storagePath = `${user.id}/${jobId}/input_${i}.${ext}`;
-      const blob = new Blob([new Uint8Array(buffer)], { type: mime });
-      const publicUrl = await uploadImage(blob as any, storagePath, 'uploads');
-      supabaseUrls.push(publicUrl);
-    }
-
-    // Persist job metadata to database via Prisma
     await prisma.job.create({
       data: {
         id: jobId,
@@ -110,11 +87,11 @@ export async function POST(req: NextRequest) {
         status: 'pending',
         style: styleResult.value,
         background: bgResult.value,
-        input_image_url: supabaseUrls[0] || null,
+        input_image_url: photoUrls[0] || null,
       },
     });
 
-    const response = NextResponse.json({ jobId, status: 'uploaded', photoCount: photos.length });
+    const response = NextResponse.json({ jobId, status: 'uploaded', photoCount: photoUrls.length });
     applyAuthCookies(response, cookieUpdates);
     return response;
   } catch (error: unknown) {

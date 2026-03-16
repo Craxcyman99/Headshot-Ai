@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
 import { Upload, Camera, Loader2, Check, AlertCircle, ArrowRight, X } from 'lucide-react';
+import { createSupabaseBrowserClient } from '@/lib/supabase';
 
 interface UploadedFile {
   file: File;
@@ -84,6 +85,8 @@ function DashboardContent() {
     });
   };
 
+  const [uploadProgress, setUploadProgress] = useState('');
+
   const uploadAndCheckout = async () => {
     if (files.length < 5) {
       setError('Please upload at least 5 photos for best results.');
@@ -94,27 +97,47 @@ function DashboardContent() {
     setError(null);
 
     try {
-      // Validate that file objects are still readable before building FormData.
-      for (const f of files) {
-        try {
-          await f.file.slice(0, 1).arrayBuffer();
-        } catch {
-          setError('Some photos are no longer accessible. Please remove them and re-upload.');
-          setCheckoutLoading(false);
-          setStep(1);
-          return;
-        }
+      const supabase = createSupabaseBrowserClient();
+
+      // Get current user for storage path
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        window.location.href = '/?redirect=/dashboard';
+        return;
       }
 
-      // Build FormData with validated files
-      const formData = new FormData();
-      files.forEach(f => formData.append('photos', f.file));
-      formData.append('style', selectedStyle);
-      formData.append('background', selectedBg);
+      // Generate a batch ID for organizing uploads in storage
+      const batchId = crypto.randomUUID();
+      const photoUrls: string[] = [];
 
-      const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData, credentials: 'same-origin' });
+      // Upload each photo directly to Supabase Storage (bypasses Vercel 4.5MB limit)
+      for (let i = 0; i < files.length; i++) {
+        setUploadProgress(`Uploading photo ${i + 1} of ${files.length}...`);
+        const file = files[i].file;
+        const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+        const path = `${user.id}/${batchId}/input_${i}.${ext}`;
 
-      // Only redirect to login on a genuine 401 JSON response
+        const { error: uploadError } = await supabase.storage
+          .from('uploads')
+          .upload(path, file, { cacheControl: '3600', upsert: false });
+
+        if (uploadError) {
+          throw new Error(`Failed to upload photo ${i + 1}: ${uploadError.message}`);
+        }
+
+        const { data: { publicUrl } } = supabase.storage.from('uploads').getPublicUrl(path);
+        photoUrls.push(publicUrl);
+      }
+
+      // Create the job via API with the uploaded photo URLs
+      setUploadProgress('Creating job...');
+      const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photoUrls, style: selectedStyle, background: selectedBg }),
+        credentials: 'same-origin',
+      });
+
       if (uploadRes.status === 401) {
         window.location.href = '/?redirect=/dashboard';
         return;
@@ -135,6 +158,7 @@ function DashboardContent() {
       setError(err.message || 'Upload failed. Please try again.');
     } finally {
       setCheckoutLoading(false);
+      setUploadProgress('');
     }
   };
 
@@ -347,7 +371,7 @@ function DashboardContent() {
                 >
                   {checkoutLoading ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" /> Uploading...
+                      <Loader2 className="w-4 h-4 animate-spin" /> {uploadProgress || 'Uploading...'}
                     </>
                   ) : (
                     <>
