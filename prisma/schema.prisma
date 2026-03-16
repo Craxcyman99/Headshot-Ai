@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Job {
+  id                String    @id @default(uuid())
+  user_id           String
+  status            String    @default("pending") // pending | processing | completed | failed
+  style             String?
+  background        String?
+  input_image_url   String?
+  output_image_urls Json?
+  created_at        DateTime  @default(now())
+  completed_at      DateTime?
+
+  payments Payment[]
+
+  @@index([user_id])
+  @@index([status])
+  @@map("jobs")
+}
+
+model Payment {
+  id                String   @id @default(uuid())
+  user_id           String
+  job_id            String
+  stripe_session_id String?  @unique
+  stripe_payment_id String?
+  amount            Int
+  currency          String   @default("usd")
+  status            String   @default("pending") // pending | succeeded | failed
+  created_at        DateTime @default(now())
+
+  job Job @relation(fields: [job_id], references: [id])
+
+  @@index([user_id])
+  @@index([job_id])
+  @@index([stripe_session_id])
+  @@map("payments")
+}
