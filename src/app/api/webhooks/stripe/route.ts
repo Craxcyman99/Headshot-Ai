@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { config } from '@/lib/config';
 import { createSupabaseAdminClient } from '@/lib/supabase';
+import { prisma } from '@/lib/prisma';
+import { generateHeadshots } from '@/lib/replicate';
 import Stripe from 'stripe';
 
 export const dynamic = 'force-dynamic';
@@ -55,6 +57,33 @@ export async function POST(req: NextRequest) {
           console.error('Failed to record payment:', upsertError);
         } else {
           console.log(`Payment recorded for job ${jobId}`);
+        }
+
+        // Trigger headshot generation
+        const job = await prisma.job.findUnique({ where: { id: jobId } });
+        if (job) {
+          await prisma.job.update({
+            where: { id: jobId },
+            data: { status: 'processing' },
+          });
+
+          try {
+            const inputUrls = [job.input_image_url].filter(Boolean) as string[];
+            await generateHeadshots({
+              imageUrls: inputUrls,
+              style: job.style || 'professional',
+              background: job.background || 'neutral',
+              userId,
+              jobId,
+            });
+            console.log(`Generation triggered for job ${jobId}`);
+          } catch (genErr) {
+            console.error(`Failed to trigger generation for job ${jobId}:`, genErr);
+            await prisma.job.update({
+              where: { id: jobId },
+              data: { status: 'failed' },
+            });
+          }
         }
       }
 

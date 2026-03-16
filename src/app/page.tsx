@@ -240,7 +240,8 @@ function LandingPageContent() {
   // Auto-open auth modal when redirected from protected route
   useEffect(() => {
     const redirect = searchParams.get('redirect');
-    if (redirect) {
+    // Prevent open redirect: only allow relative paths
+    if (redirect && redirect.startsWith('/') && !redirect.startsWith('//') && !redirect.includes('://')) {
       setRedirectTo(redirect);
       setShowAuth(true);
     }

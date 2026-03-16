@@ -13,6 +13,11 @@ export async function POST(req: NextRequest) {
   try {
     // Webhook authentication — check secret token
     const webhookSecret = process.env.REPLICATE_WEBHOOK_SECRET;
+    if (!webhookSecret && process.env.NODE_ENV === 'production') {
+      console.error('Replicate webhook: REPLICATE_WEBHOOK_SECRET is not configured');
+      return NextResponse.json({ error: 'Webhook not configured' }, { status: 500 });
+    }
+
     if (webhookSecret) {
       const token =
         req.headers.get('authorization')?.replace('Bearer ', '') ||

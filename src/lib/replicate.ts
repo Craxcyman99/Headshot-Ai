@@ -82,7 +82,7 @@ export async function generateHeadshots({
         output_quality: 90,
       },
       ...(process.env.NEXT_PUBLIC_APP_URL && {
-        webhook: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/replicate`,
+        webhook: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/replicate?jobId=${jobId}`,
         webhook_events_filter: ["completed"],
       }),
     });

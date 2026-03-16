@@ -38,20 +38,16 @@ export function validateOrigin(req: NextRequest): boolean {
     );
   }
 
-  // Check origin first (most reliable)
+  // Check origin first (most reliable) — exact match only
   if (origin) {
-    return allowedOrigins.some((allowed) =>
-      origin === allowed || origin.startsWith(allowed)
-    );
+    return allowedOrigins.some((allowed) => origin === allowed);
   }
 
-  // Fall back to referer check
+  // Fall back to referer check — exact origin match only
   if (referer) {
     try {
       const refererOrigin = new URL(referer).origin;
-      return allowedOrigins.some((allowed) =>
-        refererOrigin === allowed || refererOrigin.startsWith(allowed)
-      );
+      return allowedOrigins.some((allowed) => refererOrigin === allowed);
     } catch {
       return false;
     }

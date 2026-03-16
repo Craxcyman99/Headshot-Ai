@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
-import { validateImageFile } from '@/lib/file-security';
+import { validateImageBuffer } from '@/lib/file-security';
 import { validateStyle, validateBackground } from '@/lib/validation';
 import { requireAuth } from '@/lib/auth';
 import { validateOrigin } from '@/lib/csrf';
@@ -66,18 +66,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Maximum 15 photos allowed' }, { status: 400 });
     }
 
-    // Validate each file with magic byte checking
+    // Read and validate each file once
+    const validatedPhotos: { buffer: Buffer; name: string; mime: string }[] = [];
+
     for (const photo of photos) {
       if (!(photo instanceof File)) {
         return NextResponse.json({ error: 'Invalid file upload' }, { status: 400 });
       }
-      const validation = await validateImageFile(photo);
+      const buffer = Buffer.from(await photo.arrayBuffer());
+      const validation = validateImageBuffer(buffer);
       if (!validation.valid) {
         return NextResponse.json(
           { error: `Invalid file "${photo.name}": ${validation.error}` },
           { status: 400 }
         );
       }
+      validatedPhotos.push({ buffer, name: photo.name, mime: validation.detectedMime! });
     }
 
     // Create job
@@ -86,24 +90,14 @@ export async function POST(req: NextRequest) {
     // Upload all files to Supabase Storage
     const supabaseUrls: string[] = [];
 
-    for (let i = 0; i < photos.length; i++) {
-      const photo = photos[i];
-      const buffer = Buffer.from(await photo.arrayBuffer());
-
-      // Detect MIME type from buffer
-      const validation = await validateImageFile(new File([buffer], 'check'));
-      const detectedMime = validation.detectedMime || 'image/jpeg';
-      const ext =
-        detectedMime === 'image/jpeg'
-          ? 'jpg'
-          : detectedMime === 'image/png'
-            ? 'png'
-            : detectedMime === 'image/webp'
-              ? 'webp'
-              : 'jpg';
+    for (let i = 0; i < validatedPhotos.length; i++) {
+      const { buffer, mime } = validatedPhotos[i];
+      const ext = mime === 'image/jpeg' ? 'jpg'
+        : mime === 'image/png' ? 'png'
+        : mime === 'image/webp' ? 'webp' : 'jpg';
 
       const storagePath = `${user.id}/${jobId}/input_${i}.${ext}`;
-      const blob = new Blob([buffer], { type: detectedMime });
+      const blob = new Blob([new Uint8Array(buffer)], { type: mime });
       const publicUrl = await uploadImage(blob as any, storagePath, 'uploads');
       supabaseUrls.push(publicUrl);
     }
@@ -117,7 +111,6 @@ export async function POST(req: NextRequest) {
         style: styleResult.value,
         background: bgResult.value,
         input_image_url: supabaseUrls[0] || null,
-        output_image_urls: supabaseUrls,
       },
     });
 

@@ -5,9 +5,15 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { validateOrigin } from '@/lib/csrf';
 
 export async function POST(req: NextRequest) {
   try {
+    // CSRF protection
+    if (!validateOrigin(req)) {
+      return NextResponse.json({ error: 'Forbidden: invalid origin' }, { status: 403 });
+    }
+
     const { access_token, refresh_token } = await req.json();
 
     if (!access_token || !refresh_token) {

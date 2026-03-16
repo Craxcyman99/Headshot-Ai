@@ -94,14 +94,30 @@ function DashboardContent() {
     setError(null);
 
     try {
-      // Upload photos first
+      // Validate that file objects are still readable before building FormData.
+      // File objects from drag-drop can become detached under browser memory
+      // pressure, causing fetch() to throw "The string did not match the
+      // expected pattern" when serializing the multipart body.
+      for (const f of files) {
+        try {
+          // Reading a 1-byte slice verifies the blob data is still accessible
+          await f.file.slice(0, 1).arrayBuffer();
+        } catch {
+          setError('Some photos are no longer accessible. Please remove them and re-upload.');
+          setCheckoutLoading(false);
+          setStep(1);
+          return;
+        }
+      }
+
+      // Build FormData with validated files
       const formData = new FormData();
       files.forEach(f => formData.append('photos', f.file));
       formData.append('style', selectedStyle);
       formData.append('background', selectedBg);
 
       const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
-      
+
       // Guard against non-JSON responses (e.g. HTML error page from expired session)
       const contentType = uploadRes.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
@@ -121,7 +137,18 @@ function DashboardContent() {
       setJobId(uploadData.jobId);
       setStep(3);
     } catch (err: any) {
-      setError(err.message || 'Upload failed. Please try again.');
+      console.error('Upload error:', err);
+      // If the error looks like a cookie/auth/DOMException issue, redirect to re-auth
+      const msg = err.message || '';
+      if (msg.includes('pattern') || msg.includes('cookie') || err.name === 'DOMException') {
+        window.location.href = '/?redirect=/dashboard';
+        return;
+      }
+      setError(
+        msg.includes('pattern') || msg.includes('Authentication')
+          ? 'Your session has expired. Redirecting to sign in...'
+          : msg || 'Upload failed. Please try again.'
+      );
     } finally {
       setCheckoutLoading(false);
     }
@@ -155,10 +182,19 @@ function DashboardContent() {
 
       if (!res.ok) throw new Error(data.error || 'Checkout failed');
 
-      // Redirect to Stripe Checkout
+      // Validate Stripe URL before navigating
+      if (!data.url || typeof data.url !== 'string') {
+        throw new Error('Invalid checkout URL received');
+      }
       window.location.href = data.url;
     } catch (err: any) {
-      setError(err.message || 'Checkout failed. Please try again.');
+      console.error('Checkout error:', err);
+      const msg = err.message || '';
+      if (msg.includes('pattern') || msg.includes('cookie') || err.name === 'DOMException') {
+        window.location.href = '/?redirect=/dashboard';
+        return;
+      }
+      setError(msg || 'Checkout failed. Please try again.');
       setCheckoutLoading(false);
     }
   };

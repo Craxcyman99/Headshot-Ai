@@ -8,7 +8,12 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const code = searchParams.get('code');
-  const next = searchParams.get('next') || '/dashboard';
+  let next = searchParams.get('next') || '/dashboard';
+
+  // Prevent open redirect: only allow relative paths
+  if (!next.startsWith('/') || next.startsWith('//') || next.includes('://')) {
+    next = '/dashboard';
+  }
 
   if (!code) {
     return NextResponse.redirect(

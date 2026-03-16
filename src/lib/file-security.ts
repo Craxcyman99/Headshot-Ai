@@ -22,24 +22,22 @@ export interface FileValidationResult {
 }
 
 /**
- * Validate file by checking magic bytes (not just extension/mime type).
+ * Validate an image buffer by checking magic bytes.
  */
-export async function validateImageFile(file: File): Promise<FileValidationResult> {
-  if (file.size > MAX_FILE_SIZE) {
+export function validateImageBuffer(buffer: Buffer): FileValidationResult {
+  if (buffer.length > MAX_FILE_SIZE) {
     return { valid: false, error: `File too large: max ${MAX_FILE_SIZE / 1024 / 1024}MB` };
   }
 
-  if (file.size === 0) {
+  if (buffer.length === 0) {
     return { valid: false, error: 'Empty file' };
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
   const header = Array.from(buffer.subarray(0, 8));
 
   for (const sig of IMAGE_SIGNATURES) {
     const match = sig.bytes.every((b, i) => header[i] === b);
     if (match) {
-      // For WebP, also check for WEBP marker at offset 8
       if (sig.mime === 'image/webp') {
         if (buffer.length < 12) return { valid: false, error: 'Invalid WebP file' };
         const webpMarker = buffer.subarray(8, 12).toString('ascii');
@@ -53,6 +51,14 @@ export async function validateImageFile(file: File): Promise<FileValidationResul
   }
 
   return { valid: false, error: 'File is not a valid image (magic byte check failed)' };
+}
+
+/**
+ * Validate file by checking magic bytes (not just extension/mime type).
+ */
+export async function validateImageFile(file: File): Promise<FileValidationResult> {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return validateImageBuffer(buffer);
 }
 
 /**

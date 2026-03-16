@@ -11,6 +11,7 @@ import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import { requireAuth } from '@/lib/auth';
 import { validateOrigin } from '@/lib/csrf';
 import { validateUUID } from '@/lib/validation';
+import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +47,12 @@ export async function POST(req: NextRequest) {
     }
     const jobId = jobIdValidation.value;
 
+    // Verify the job belongs to the authenticated user
+    const job = await prisma.job.findUnique({ where: { id: jobId } });
+    if (!job || job.user_id !== user.id) {
+      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card'],
@@ -65,9 +72,9 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ url: session.url, sessionId: session.id });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Checkout error:', error);
-    const message = error.message || '';
+    const message = error instanceof Error ? error.message : 'Unknown error';
     const isAuthError = message.includes('did not match') ||
                         message.includes('is not a function') ||
                         message.includes('Cannot read prop');

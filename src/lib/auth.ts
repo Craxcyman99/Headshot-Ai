@@ -44,7 +44,13 @@ export async function requireAuth(
       }
     );
 
-    const { data: { user }, error } = await supabase.auth.getUser();
+    // Check Authorization: Bearer header first, then fall back to cookies
+    const authHeader = req.headers.get('authorization');
+    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+
+    const { data: { user }, error } = bearerToken
+      ? await supabase.auth.getUser(bearerToken)
+      : await supabase.auth.getUser();
 
     if (error || !user) {
       return {
