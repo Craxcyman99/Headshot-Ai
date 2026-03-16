@@ -116,7 +116,7 @@ function DashboardContent() {
       formData.append('style', selectedStyle);
       formData.append('background', selectedBg);
 
-      const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+      const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData, credentials: 'same-origin' });
 
       // Guard against non-JSON responses (e.g. HTML error page from expired session)
       const contentType = uploadRes.headers.get('content-type') || '';
@@ -165,6 +165,7 @@ function DashboardContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jobId }),
+        credentials: 'same-origin',
       });
       
       const checkoutContentType = res.headers.get('content-type') || '';

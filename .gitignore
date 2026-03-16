@@ -44,3 +44,4 @@ prisma/*.db-journal
 # env files with secrets
 .env.local
 .env*.local
+node_modules/

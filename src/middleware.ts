@@ -12,6 +12,12 @@ const ADMIN_PATHS = ['/admin'];
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Defense in depth: never intercept API routes even if matcher mis-fires.
+  // API routes handle their own auth via requireAuth().
+  if (pathname.startsWith('/api/') || pathname.startsWith('/_next/')) {
+    return NextResponse.next();
+  }
+
   // Only protect specific paths
   const isProtected = PROTECTED_PATHS.some(
     (path) => pathname === path || pathname.startsWith(path + '/')
@@ -41,7 +47,7 @@ export async function middleware(request: NextRequest) {
             request: { headers: request.headers },
           });
           cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
+            response.cookies.set(name, value, { ...options, path: '/', sameSite: 'lax' });
           });
         },
       },
