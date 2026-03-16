@@ -35,16 +35,14 @@ export default function ResultsPage({ params }: Props) {
             body: JSON.stringify({ jobId }),
           });
 
+          const genData = await genRes.json();
+
           if (!genRes.ok) {
-            const errData = await genRes.json();
             // If 402, payment wasn't recorded yet (webhook delay) — poll anyway
             if (genRes.status !== 402) {
-              throw new Error(errData.error || 'Generation failed');
+              throw new Error(genData.error || 'Generation failed');
             }
-          }
-
-          const genData = await genRes.json();
-          if (genData.status === 'completed') {
+          } else if (genData.status === 'completed') {
             setStatus('completed');
             setImages(genData.images || []);
             // Clean up URL params
