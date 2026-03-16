@@ -34,6 +34,12 @@ export async function requireAuth(
           getAll() {
             return req.cookies.getAll().map(c => ({ name: c.name, value: c.value }));
           },
+          setAll() {
+            // Read-only context: API route handlers don't propagate cookie
+            // updates via requireAuth. The middleware handles token refresh
+            // for page requests. This no-op prevents the Supabase SSR
+            // library from throwing when it tries to update cookies.
+          },
         },
       }
     );

@@ -43,7 +43,7 @@ export const config = {
       validateSecret('STRIPE_SECRET_KEY', v);
       return v;
     })(),
-    publishableKey: env('STRIPE_PUBLISHABLE_KEY', 'pk_test_placeholder'),
+    publishableKey: env('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', 'pk_test_placeholder'),
     webhookSecret: (() => {
       const v = env('STRIPE_WEBHOOK_SECRET', 'whsec_placeholder');
       validateSecret('STRIPE_WEBHOOK_SECRET', v);

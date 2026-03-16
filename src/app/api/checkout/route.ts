@@ -67,9 +67,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ url: session.url, sessionId: session.id });
   } catch (error: any) {
     console.error('Checkout error:', error);
+    const message = error.message || '';
+    const isAuthError = message.includes('did not match') ||
+                        message.includes('is not a function') ||
+                        message.includes('Cannot read prop');
     return NextResponse.json(
-      { error: error.message || 'Checkout failed' },
-      { status: 500 }
+      { error: isAuthError ? 'Session expired. Please sign in again.' : (message || 'Checkout failed') },
+      { status: isAuthError ? 401 : 500 }
     );
   }
 }

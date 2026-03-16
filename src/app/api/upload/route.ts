@@ -122,8 +122,16 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ jobId, status: 'uploaded', photoCount: photos.length });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Upload error:', error);
-    return NextResponse.json({ error: error.message || 'Upload failed' }, { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    // Map internal/cryptic errors to user-friendly messages
+    const isAuthError = message.includes('did not match') ||
+                        message.includes('is not a function') ||
+                        message.includes('Cannot read prop');
+    return NextResponse.json(
+      { error: isAuthError ? 'Session expired. Please sign in again.' : (message || 'Upload failed') },
+      { status: isAuthError ? 401 : 500 }
+    );
   }
 }

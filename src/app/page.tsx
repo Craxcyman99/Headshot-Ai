@@ -58,7 +58,7 @@ function AuthModal({ isOpen, onClose, redirectTo }: { isOpen: boolean; onClose: 
         // If autoconfirm is on, user session exists immediately
         if (data?.session) {
           // Persist session via server-set cookies before navigating
-          await fetch('/api/auth/session', {
+          const sessionRes = await fetch('/api/auth/session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -66,6 +66,9 @@ function AuthModal({ isOpen, onClose, redirectTo }: { isOpen: boolean; onClose: 
               refresh_token: data.session.refresh_token,
             }),
           });
+          if (!sessionRes.ok) {
+            console.error('Failed to persist session cookies:', sessionRes.status);
+          }
           window.location.href = redirectTo || '/dashboard';
           return;
         }
@@ -78,7 +81,7 @@ function AuthModal({ isOpen, onClose, redirectTo }: { isOpen: boolean; onClose: 
         if (error) throw error;
         // Persist session via server-set cookies before navigating
         if (data?.session) {
-          await fetch('/api/auth/session', {
+          const sessionRes = await fetch('/api/auth/session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -86,6 +89,9 @@ function AuthModal({ isOpen, onClose, redirectTo }: { isOpen: boolean; onClose: 
               refresh_token: data.session.refresh_token,
             }),
           });
+          if (!sessionRes.ok) {
+            console.error('Failed to persist session cookies:', sessionRes.status);
+          }
         }
         window.location.href = redirectTo || '/dashboard';
       }
