@@ -57,17 +57,36 @@ function AuthModal({ isOpen, onClose, redirectTo }: { isOpen: boolean; onClose: 
         if (error) throw error;
         // If autoconfirm is on, user session exists immediately
         if (data?.session) {
+          // Persist session via server-set cookies before navigating
+          await fetch('/api/auth/session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              access_token: data.session.access_token,
+              refresh_token: data.session.refresh_token,
+            }),
+          });
           window.location.href = redirectTo || '/dashboard';
           return;
         }
         setConfirmEmail(true);
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
-        // Successful sign-in — redirect
+        // Persist session via server-set cookies before navigating
+        if (data?.session) {
+          await fetch('/api/auth/session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              access_token: data.session.access_token,
+              refresh_token: data.session.refresh_token,
+            }),
+          });
+        }
         window.location.href = redirectTo || '/dashboard';
       }
     } catch (err: any) {

@@ -101,7 +101,20 @@ function DashboardContent() {
       formData.append('background', selectedBg);
 
       const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+      
+      // Guard against non-JSON responses (e.g. HTML error page from expired session)
+      const contentType = uploadRes.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        window.location.href = '/?redirect=/dashboard';
+        return;
+      }
+
       const uploadData = await uploadRes.json();
+
+      if (uploadRes.status === 401) {
+        window.location.href = '/?redirect=/dashboard';
+        return;
+      }
 
       if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed');
 
@@ -126,7 +139,19 @@ function DashboardContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jobId }),
       });
+      
+      const checkoutContentType = res.headers.get('content-type') || '';
+      if (!checkoutContentType.includes('application/json')) {
+        window.location.href = '/?redirect=/dashboard';
+        return;
+      }
+
       const data = await res.json();
+
+      if (res.status === 401) {
+        window.location.href = '/?redirect=/dashboard';
+        return;
+      }
 
       if (!res.ok) throw new Error(data.error || 'Checkout failed');
 
