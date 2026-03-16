@@ -53,11 +53,27 @@ export async function POST(req: NextRequest) {
       }
     );
 
-    await supabase.auth.setSession({ access_token, refresh_token });
+    const { error: sessionError } = await supabase.auth.setSession({ access_token, refresh_token });
+
+    if (sessionError) {
+      console.error('[session] Failed to set Supabase session:', sessionError.message);
+      return NextResponse.json(
+        { error: 'Failed to establish session', detail: sessionError.message },
+        { status: 401 }
+      );
+    }
 
     // Log Set-Cookie headers for debugging auth flow
     const setCookies = response.headers.getSetCookie();
     console.log(`[session] Set ${setCookies.length} cookie(s):`, setCookies.map(c => c.split('=')[0]));
+
+    if (setCookies.length === 0) {
+      console.error('[session] setSession succeeded but no cookies were set');
+      return NextResponse.json(
+        { error: 'Session created but cookies failed to set' },
+        { status: 500 }
+      );
+    }
 
     return response;
   } catch (err) {

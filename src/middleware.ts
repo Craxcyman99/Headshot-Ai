@@ -54,9 +54,30 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Try getUser() first (validates JWT with Supabase), fall back to getSession() 
+  // if Supabase API is unreachable (avoids redirect loop when Supabase is down)
+  let user = null;
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    if (!error) {
+      user = data.user;
+    } else {
+      // getUser() failed — try getSession() as fallback (reads from cookie only, no network)
+      console.warn(`[middleware] getUser() failed: ${error.message} — falling back to getSession()`);
+      const { data: sessionData } = await supabase.auth.getSession();
+      user = sessionData.session?.user ?? null;
+    }
+  } catch (err: any) {
+    console.error(`[middleware] Auth check threw: ${err.message} — falling back to getSession()`);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      user = sessionData.session?.user ?? null;
+    } catch {
+      // Complete auth failure — let the user through to avoid infinite redirect
+      console.error('[middleware] Complete auth failure, allowing request through');
+      return response;
+    }
+  }
 
   if (!user) {
     console.warn(`[middleware] No user session on protected route ${pathname} — redirecting to login`);

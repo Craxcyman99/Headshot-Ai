@@ -61,13 +61,15 @@ function AuthModal({ isOpen, onClose, redirectTo }: { isOpen: boolean; onClose: 
           const sessionRes = await fetch('/api/auth/session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify({
               access_token: data.session.access_token,
               refresh_token: data.session.refresh_token,
             }),
           });
           if (!sessionRes.ok) {
-            console.error('Failed to persist session cookies:', sessionRes.status);
+            const detail = await sessionRes.json().catch(() => ({}));
+            throw new Error(detail.error || `Failed to persist session (${sessionRes.status})`);
           }
           window.location.href = redirectTo || '/dashboard';
           return;
@@ -84,13 +86,15 @@ function AuthModal({ isOpen, onClose, redirectTo }: { isOpen: boolean; onClose: 
           const sessionRes = await fetch('/api/auth/session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify({
               access_token: data.session.access_token,
               refresh_token: data.session.refresh_token,
             }),
           });
           if (!sessionRes.ok) {
-            console.error('Failed to persist session cookies:', sessionRes.status);
+            const detail = await sessionRes.json().catch(() => ({}));
+            throw new Error(detail.error || `Failed to persist session (${sessionRes.status})`);
           }
         }
         window.location.href = redirectTo || '/dashboard';
