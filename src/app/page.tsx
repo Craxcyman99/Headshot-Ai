@@ -49,12 +49,17 @@ function AuthModal({ isOpen, onClose, redirectTo }: { isOpen: boolean; onClose: 
           throw new Error('Password must be at least 6 characters.');
         }
         const callbackUrl = `${window.location.origin}/auth/callback${redirectTo ? `?next=${encodeURIComponent(redirectTo)}` : ''}`;
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: { emailRedirectTo: callbackUrl },
         });
         if (error) throw error;
+        // If autoconfirm is on, user session exists immediately
+        if (data?.session) {
+          window.location.href = redirectTo || '/dashboard';
+          return;
+        }
         setConfirmEmail(true);
       } else {
         const { error } = await supabase.auth.signInWithPassword({
