@@ -105,6 +105,66 @@ export async function signOut() {
 const UPLOADS_BUCKET = "uploads";
 const RESULTS_BUCKET = "results";
 
+/**
+ * Extract the storage path from a Supabase public/storage URL.
+ * Handles URLs like:
+ *   https://<project>.supabase.co/storage/v1/object/public/uploads/userId/batchId/input_0.jpg
+ *   https://<project>.supabase.co/storage/v1/object/sign/uploads/...
+ * Returns { bucket, path } or null if not a recognized Supabase storage URL.
+ */
+export function parseStorageUrl(url: string): { bucket: string; path: string } | null {
+  try {
+    const u = new URL(url);
+    // Match /storage/v1/object/public/<bucket>/<path...>
+    const match = u.pathname.match(/\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/(.+)/);
+    if (match) {
+      return { bucket: match[1], path: match[2] };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Generate a signed URL for a private storage object.
+ * Uses the service role key to bypass RLS.
+ * @param bucket - Storage bucket name
+ * @param path - Object path within the bucket
+ * @param expiresIn - Seconds until expiry (default: 3600 = 1 hour)
+ */
+export async function createSignedStorageUrl(
+  bucket: string,
+  path: string,
+  expiresIn: number = 3600
+): Promise<string> {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .createSignedUrl(path, expiresIn);
+
+  if (error || !data?.signedUrl) {
+    throw new Error(`Failed to create signed URL: ${error?.message || 'unknown error'}`);
+  }
+
+  return data.signedUrl;
+}
+
+/**
+ * Convert a Supabase public storage URL to a signed URL.
+ * If the URL isn't a recognized Supabase storage URL, returns it unchanged.
+ * @param publicUrl - The public URL to convert
+ * @param expiresIn - Seconds until expiry (default: 3600 = 1 hour)
+ */
+export async function toSignedUrl(
+  publicUrl: string,
+  expiresIn: number = 3600
+): Promise<string> {
+  const parsed = parseStorageUrl(publicUrl);
+  if (!parsed) return publicUrl; // Not a Supabase storage URL, return as-is
+  return createSignedStorageUrl(parsed.bucket, parsed.path, expiresIn);
+}
+
 export async function uploadImage(
   file: File | Blob,
   path: string,

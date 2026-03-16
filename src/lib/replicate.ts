@@ -1,4 +1,5 @@
 import Replicate from "replicate";
+import { toSignedUrl } from "@/lib/supabase";
 
 const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN!,
@@ -67,12 +68,15 @@ export async function generateHeadshots({
   const bgDescription = BACKGROUND_DESCRIPTIONS[background] || background;
   const prompt = promptTemplate.replace("{background}", bgDescription);
 
+  // Generate signed URL so Replicate can fetch from our private bucket
+  const signedImageUrl = await toSignedUrl(imageUrls[0], 3600); // 1 hour expiry
+
   const prediction = await withRetry(async () => {
     return replicate.predictions.create({
       model: MODEL,
       input: {
         prompt,
-        image: imageUrls[0], // primary input image
+        image: signedImageUrl, // signed URL for private bucket access
         num_outputs: numOutputs,
         guidance_scale: 3.5,
         num_inference_steps: 28,

@@ -5,21 +5,17 @@ import { motion } from 'framer-motion';
 import { Camera, Download, Loader2, Check, RefreshCw, Share2 } from 'lucide-react';
 
 type Props = {
-  params: Promise<{ jobId: string }>;
+  params: { jobId: string };
 };
 
 export default function ResultsPage({ params }: Props) {
   const [status, setStatus] = useState<'loading' | 'generating' | 'completed' | 'failed'>('loading');
   const [images, setImages] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [jobId, setJobId] = useState<string>('');
+  const jobId = params.jobId;
   const [pollAttempts, setPollAttempts] = useState(0);
 
   const MAX_POLL_ATTEMPTS = 100; // ~5 minutes at 3s interval
-
-  useEffect(() => {
-    params.then(p => setJobId(p.jobId));
-  }, [params]);
 
   useEffect(() => {
     if (!jobId) return;

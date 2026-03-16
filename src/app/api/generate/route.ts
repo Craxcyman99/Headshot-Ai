@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Replicate from 'replicate';
 import { STYLE_PROMPTS, BACKGROUND_DESCRIPTIONS } from '@/lib/replicate';
-import { createSupabaseAdminClient } from '@/lib/supabase';
+import { createSupabaseAdminClient, toSignedUrl } from '@/lib/supabase';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { requireAuth, applyAuthCookies } from '@/lib/auth';
 import { validateOrigin } from '@/lib/csrf';
@@ -115,6 +115,9 @@ export async function POST(req: NextRequest) {
         BACKGROUND_DESCRIPTIONS[job.background || 'neutral'] || job.background || 'neutral';
       const prompt = promptTemplate.replace('{background}', bgDescription);
 
+      // Generate a signed URL so Replicate can fetch the image from our private bucket
+      const signedImageUrl = await toSignedUrl(primaryImage, 3600); // 1 hour expiry
+
       // Pass jobId via webhook URL query param so the webhook can look up the job directly
       const webhookBase = process.env.NEXT_PUBLIC_APP_URL
         ? `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/replicate`
@@ -127,7 +130,7 @@ export async function POST(req: NextRequest) {
         model: MODEL,
         input: {
           prompt,
-          image: primaryImage,
+          image: signedImageUrl,
           num_outputs: 5,
           guidance_scale: 3.5,
           num_inference_steps: 28,
