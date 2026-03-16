@@ -71,13 +71,24 @@ export async function getUser() {
   return user;
 }
 
-export async function signInWithEmail(email: string) {
+export async function signUp(email: string, password: string) {
   const supabase = createSupabaseBrowserClient();
-  const { data, error } = await supabase.auth.signInWithOtp({
+  const { data, error } = await supabase.auth.signUp({
     email,
+    password,
     options: {
       emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
     },
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function signIn(email: string, password: string) {
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
   });
   if (error) throw error;
   return data;

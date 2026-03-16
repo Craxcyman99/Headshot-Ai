@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Camera, Sparkles, Download, Clock, Shield, Zap, Star, ChevronRight, X, Loader2, Mail } from 'lucide-react';
+import { Camera, Sparkles, Download, Clock, Shield, Zap, Star, ChevronRight, X, Loader2, Mail, Eye, EyeOff } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
@@ -29,8 +29,11 @@ const faqs = [
 
 function AuthModal({ isOpen, onClose, redirectTo }: { isOpen: boolean; onClose: () => void; redirectTo?: string }) {
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [loading, setLoading] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [confirmEmail, setConfirmEmail] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,18 +43,39 @@ function AuthModal({ isOpen, onClose, redirectTo }: { isOpen: boolean; onClose: 
 
     try {
       const supabase = createSupabaseBrowserClient();
-      const callbackUrl = `${window.location.origin}/auth/callback${redirectTo ? `?next=${encodeURIComponent(redirectTo)}` : ''}`;
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: callbackUrl },
-      });
-      if (error) throw error;
-      setSent(true);
+
+      if (mode === 'signup') {
+        if (password.length < 6) {
+          throw new Error('Password must be at least 6 characters.');
+        }
+        const callbackUrl = `${window.location.origin}/auth/callback${redirectTo ? `?next=${encodeURIComponent(redirectTo)}` : ''}`;
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: callbackUrl },
+        });
+        if (error) throw error;
+        setConfirmEmail(true);
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+        // Successful sign-in — redirect
+        window.location.href = redirectTo || '/dashboard';
+      }
     } catch (err: any) {
       setError(err.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const switchMode = () => {
+    setMode(mode === 'signin' ? 'signup' : 'signin');
+    setError(null);
+    setConfirmEmail(false);
   };
 
   if (!isOpen) return null;
@@ -76,15 +100,21 @@ function AuthModal({ isOpen, onClose, redirectTo }: { isOpen: boolean; onClose: 
             <X className="w-5 h-5" />
           </button>
 
-          {sent ? (
+          {confirmEmail ? (
             <div className="text-center py-4">
               <div className="w-16 h-16 rounded-full bg-brand-500/10 flex items-center justify-center mx-auto mb-4">
                 <Mail className="w-8 h-8 text-brand-400" />
               </div>
-              <h2 className="text-2xl font-display font-bold mb-2">Check Your Email</h2>
-              <p className="text-dark-300 mb-1">We sent a magic link to</p>
+              <h2 className="text-2xl font-display font-bold mb-2">Confirm Your Email</h2>
+              <p className="text-dark-300 mb-1">We sent a confirmation link to</p>
               <p className="font-semibold text-white mb-4">{email}</p>
-              <p className="text-dark-400 text-sm">Click the link in your email to sign in. Check spam if you don't see it.</p>
+              <p className="text-dark-400 text-sm mb-6">Click the link in your email to activate your account, then come back and sign in.</p>
+              <button
+                onClick={() => { setConfirmEmail(false); setMode('signin'); setPassword(''); }}
+                className="px-6 py-2.5 bg-dark-800 hover:bg-dark-700 border border-dark-700 rounded-xl font-medium transition text-sm"
+              >
+                Back to Sign In
+              </button>
             </div>
           ) : (
             <>
@@ -92,8 +122,12 @@ function AuthModal({ isOpen, onClose, redirectTo }: { isOpen: boolean; onClose: 
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center mx-auto mb-4">
                   <Camera className="w-6 h-6 text-white" />
                 </div>
-                <h2 className="text-2xl font-display font-bold mb-1">Sign In to HeadshotAI</h2>
-                <p className="text-dark-400 text-sm">Enter your email and we'll send you a magic link</p>
+                <h2 className="text-2xl font-display font-bold mb-1">
+                  {mode === 'signin' ? 'Sign In to HeadshotAI' : 'Create Your Account'}
+                </h2>
+                <p className="text-dark-400 text-sm">
+                  {mode === 'signin' ? 'Enter your email and password to continue' : 'Sign up to get started with your headshots'}
+                </p>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -108,6 +142,25 @@ function AuthModal({ isOpen, onClose, redirectTo }: { isOpen: boolean; onClose: 
                   />
                 </div>
 
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    minLength={6}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder={mode === 'signup' ? 'Create a password (min 6 chars)' : 'Password'}
+                    className="w-full px-4 py-3 rounded-xl bg-dark-800 border border-dark-700 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition text-white placeholder-dark-500 pr-12"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-400 hover:text-dark-200 transition"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+
                 {error && (
                   <p className="text-red-400 text-sm text-center">{error}</p>
                 )}
@@ -118,15 +171,19 @@ function AuthModal({ isOpen, onClose, redirectTo }: { isOpen: boolean; onClose: 
                   className="w-full px-6 py-3 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 disabled:opacity-50 rounded-xl font-semibold transition-all flex items-center justify-center gap-2"
                 >
                   {loading ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" /> Sending...</>
+                    <><Loader2 className="w-4 h-4 animate-spin" /> {mode === 'signin' ? 'Signing in...' : 'Creating account...'}</>
                   ) : (
-                    'Continue with Email'
+                    mode === 'signin' ? 'Sign In' : 'Create Account'
                   )}
                 </button>
               </form>
 
-              <p className="text-dark-500 text-xs text-center mt-4">
-                No password needed. We'll email you a secure sign-in link.
+              <p className="text-dark-500 text-sm text-center mt-4">
+                {mode === 'signin' ? (
+                  <>Don&apos;t have an account?{' '}<button onClick={switchMode} className="text-brand-400 hover:text-brand-300 font-medium transition">Sign Up</button></>
+                ) : (
+                  <>Already have an account?{' '}<button onClick={switchMode} className="text-brand-400 hover:text-brand-300 font-medium transition">Sign In</button></>
+                )}
               </p>
             </>
           )}
