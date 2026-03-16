@@ -23,6 +23,7 @@ export const dynamic = 'force-dynamic';
 
 // ---------- POST — start generation ----------
 export async function POST(req: NextRequest) {
+  let jobId: string | undefined;
   try {
     // CSRF protection
     if (!validateOrigin(req)) {
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
     if (!jobIdValidation.valid) {
       return NextResponse.json({ error: jobIdValidation.error }, { status: 400 });
     }
-    const jobId = jobIdValidation.value;
+    jobId = jobIdValidation.value;
 
     // Look up job in database
     const job = await prisma.job.findUnique({ where: { id: jobId } });
@@ -60,13 +61,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
-    // Skip if already generating or completed
-    if (job.status === 'processing' || job.status === 'completed') {
+    // Skip if completed
+    if (job.status === 'completed') {
       return NextResponse.json({
         jobId,
         status: job.status,
         results: (job.output_image_urls as string[]) || [],
       });
+    }
+
+    // If processing, check for timeout (stuck jobs > 10 minutes)
+    if (job.status === 'processing') {
+      const TEN_MINUTES = 10 * 60 * 1000;
+      const jobTimestamp = new Date(job.created_at).getTime();
+      const isStuck = Date.now() - jobTimestamp > TEN_MINUTES;
+
+      if (isStuck) {
+        // Reset stuck job to pending so it can be retried
+        await prisma.job.update({
+          where: { id: jobId },
+          data: { status: 'pending' },
+        });
+        console.log(`Job ${jobId} was stuck in processing for >10min, reset to pending`);
+      } else {
+        return NextResponse.json({
+          jobId,
+          status: job.status,
+          results: (job.output_image_urls as string[]) || [],
+        });
+      }
     }
 
     // Verify payment before generating
@@ -177,6 +200,19 @@ export async function POST(req: NextRequest) {
     }
   } catch (error: any) {
     console.error('Generation error:', error);
+
+    // Rollback: mark job as failed so it doesn't stay stuck as 'processing'
+    if (jobId) {
+      try {
+        await prisma.job.update({
+          where: { id: jobId },
+          data: { status: 'failed' },
+        });
+      } catch (rollbackError) {
+        console.error('Failed to rollback job status:', rollbackError);
+      }
+    }
+
     return NextResponse.json(
       { error: error.message || 'Generation failed' },
       { status: 500 }

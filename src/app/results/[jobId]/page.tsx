@@ -12,6 +12,7 @@ export default function ResultsPage({ params }: Props) {
   const [status, setStatus] = useState<'loading' | 'generating' | 'completed' | 'failed'>('loading');
   const [images, setImages] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const jobId = params.jobId;
   const [pollAttempts, setPollAttempts] = useState(0);
 
@@ -54,10 +55,11 @@ export default function ResultsPage({ params }: Props) {
 
         // Poll for status
         poll();
-      } catch (err) {
+      } catch (err: any) {
         console.error('Generation error:', err);
-        // Fall through to polling — maybe payment webhook hasn't fired yet
-        poll();
+        setStatus('failed');
+        setErrorMessage(err.message || 'Generation failed. Please try again.');
+        return;
       }
     };
 
@@ -158,7 +160,10 @@ export default function ResultsPage({ params }: Props) {
           >
             <div className="text-6xl mb-4">😔</div>
             <h1 className="text-2xl font-display font-bold mb-2">Something Went Wrong</h1>
-            <p className="text-dark-400 mb-6">Don&apos;t worry, we didn&apos;t charge you.</p>
+            <p className="text-dark-400 mb-2">Don&apos;t worry, we didn&apos;t charge you.</p>
+            {errorMessage && (
+              <p className="text-red-400 text-sm mb-4">{errorMessage}</p>
+            )}
             <a
               href="/dashboard"
               className="px-6 py-3 bg-brand-500 hover:bg-brand-400 rounded-full font-medium transition"
