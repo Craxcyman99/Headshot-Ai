@@ -11,6 +11,7 @@ export async function POST(req: NextRequest) {
   try {
     // CSRF protection
     if (!validateOrigin(req)) {
+      console.error('[session] CSRF rejected — origin:', req.headers.get('origin'), 'host:', req.headers.get('host'));
       return NextResponse.json({ error: 'Forbidden: invalid origin' }, { status: 403 });
     }
 
@@ -22,6 +23,8 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    const isSecure = process.env.NODE_ENV === 'production' || req.headers.get('x-forwarded-proto') === 'https';
 
     const response = NextResponse.json({ success: true });
 
@@ -35,7 +38,15 @@ export async function POST(req: NextRequest) {
           },
           setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
             cookiesToSet.forEach(({ name, value, options }) => {
-              response.cookies.set({ name, value, ...options, path: '/', sameSite: 'lax' as const });
+              response.cookies.set({
+                name,
+                value,
+                ...options,
+                path: '/',
+                sameSite: 'lax' as const,
+                secure: isSecure,
+                // No explicit domain — browser defaults to current host
+              });
             });
           },
         },
@@ -44,8 +55,13 @@ export async function POST(req: NextRequest) {
 
     await supabase.auth.setSession({ access_token, refresh_token });
 
+    // Log Set-Cookie headers for debugging auth flow
+    const setCookies = response.headers.getSetCookie();
+    console.log(`[session] Set ${setCookies.length} cookie(s):`, setCookies.map(c => c.split('=')[0]));
+
     return response;
-  } catch {
+  } catch (err) {
+    console.error('[session] Failed to set session:', err);
     return NextResponse.json(
       { error: 'Failed to set session' },
       { status: 500 }

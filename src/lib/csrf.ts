@@ -16,17 +16,23 @@ export function validateOrigin(req: NextRequest): boolean {
   const origin = req.headers.get('origin');
   const referer = req.headers.get('referer');
   const host = req.headers.get('host');
+  const forwardedHost = req.headers.get('x-forwarded-host');
 
-  const appUrl = config.app.url;
+  const appUrl = config.app.url.replace(/\/+$/, '');
   let allowedOrigins = [appUrl];
 
-  // Also allow same-origin requests via host header
-  if (host) {
-    const isLocalhost = host.startsWith('localhost') || host.startsWith('127.0.0.1');
+  // Allow same-origin requests via host header (covers Vercel preview deploys)
+  for (const h of [host, forwardedHost].filter(Boolean) as string[]) {
+    const isLocalhost = h.startsWith('localhost') || h.startsWith('127.0.0.1');
     if (isLocalhost || process.env.NODE_ENV !== 'production') {
-      allowedOrigins.push(`http://${host}`);
+      allowedOrigins.push(`http://${h}`);
     }
-    allowedOrigins.push(`https://${host}`);
+    allowedOrigins.push(`https://${h}`);
+  }
+
+  // Allow Vercel deployment URL if set
+  if (process.env.VERCEL_URL) {
+    allowedOrigins.push(`https://${process.env.VERCEL_URL}`);
   }
 
   // Allow localhost in development

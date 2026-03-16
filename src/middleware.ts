@@ -59,7 +59,7 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    // Redirect to home page with return URL
+    console.warn(`[middleware] No user session on protected route ${pathname} — redirecting to login`);
     const redirectUrl = new URL('/', request.url);
     redirectUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(redirectUrl);
